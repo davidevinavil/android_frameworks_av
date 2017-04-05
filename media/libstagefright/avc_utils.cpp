@@ -456,10 +456,7 @@ bool IsIDR(const sp<ABuffer> &buffer) {
     const uint8_t *nalStart;
     size_t nalSize;
     while (getNextNALUnit(&data, &size, &nalStart, &nalSize, true) == OK) {
-        if (nalSize == 0u) {
-            ALOGW("skipping empty nal unit from potentially malformed bitstream");
-            continue;
-        }
+        CHECK_GT(nalSize, 0u);
 
         unsigned nalType = nalStart[0] & 0x1f;
 

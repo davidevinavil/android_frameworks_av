@@ -45,8 +45,7 @@ public:
                     const wp<AudioFlinger::EffectChain>& chain,
                     effect_descriptor_t *desc,
                     int id,
-                    audio_session_t sessionId,
-                    bool pinned);
+                    audio_session_t sessionId);
     virtual ~EffectModule();
 
     enum effect_state {
@@ -94,9 +93,8 @@ public:
     const wp<ThreadBase>& thread() { return mThread; }
 
     status_t addHandle(EffectHandle *handle);
-    ssize_t  disconnectHandle(EffectHandle *handle, bool unpinIfLast);
-    ssize_t removeHandle(EffectHandle *handle);
-    ssize_t removeHandle_l(EffectHandle *handle);
+    size_t disconnect(EffectHandle *handle, bool unpinIfLast);
+    size_t removeHandle(EffectHandle *handle);
 
     const effect_descriptor_t& desc() const { return mDescriptor; }
     wp<EffectChain>&     chain() { return mChain; }
@@ -126,7 +124,6 @@ public:
     status_t         setOffloaded(bool offloaded, audio_io_handle_t io);
     bool             isOffloaded() const;
     void             addEffectToHal_l();
-    void             release_l();
 
     void             dump(int fd, const Vector<String16>& args);
 
@@ -211,17 +208,12 @@ public:
     bool enabled() const { return mEnabled; }
 
     // Getters
-    wp<EffectModule> effect() const { return mEffect; }
-    int id() const {
-        sp<EffectModule> effect = mEffect.promote();
-        if (effect == 0) {
-            return 0;
-        }
-        return effect->id();
-    }
+    int id() const { return mEffect->id(); }
     int priority() const { return mPriority; }
     bool hasControl() const { return mHasControl; }
-    bool disconnected() const { return mDisconnected; }
+    sp<EffectModule> effect() const { return mEffect; }
+    // destroyed_l() must be called with the associated EffectModule mLock held
+    bool destroyed_l() const { return mDestroyed; }
 
     void dumpToBuffer(char* buffer, size_t size);
 
@@ -230,8 +222,7 @@ protected:
     EffectHandle(const EffectHandle&);
     EffectHandle& operator =(const EffectHandle&);
 
-    Mutex mLock;                        // protects IEffect method calls
-    wp<EffectModule> mEffect;           // pointer to controlled EffectModule
+    sp<EffectModule> mEffect;           // pointer to controlled EffectModule
     sp<IEffectClient> mEffectClient;    // callback interface for client notifications
     /*const*/ sp<Client> mClient;       // client for shared memory allocation, see disconnect()
     sp<IMemory>         mCblkMemory;    // shared memory for control block
@@ -242,7 +233,8 @@ protected:
     bool mHasControl;                   // true if this handle is controlling the effect
     bool mEnabled;                      // cached enable state: needed when the effect is
                                         // restored after being suspended
-    bool mDisconnected;                 // Set to true by disconnect()
+    bool mDestroyed;                    // Set to true by destructor. Access with EffectModule
+                                        // mLock held
 };
 
 // the EffectChain class represents a group of effects associated to one audio session.
@@ -277,15 +269,8 @@ public:
         mLock.unlock();
     }
 
-    status_t createEffect_l(sp<EffectModule>& effect,
-                            ThreadBase *thread,
-                            effect_descriptor_t *desc,
-                            int id,
-                            audio_session_t sessionId,
-                            bool pinned);
     status_t addEffect_l(const sp<EffectModule>& handle);
-    status_t addEffect_ll(const sp<EffectModule>& handle);
-    size_t removeEffect_l(const sp<EffectModule>& handle, bool release = false);
+    size_t removeEffect_l(const sp<EffectModule>& handle);
 
     audio_session_t sessionId() const { return mSessionId; }
     void setSessionId(audio_session_t sessionId) { mSessionId = sessionId; }
